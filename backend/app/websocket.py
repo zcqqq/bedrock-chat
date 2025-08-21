@@ -281,44 +281,84 @@ def handler(event, context):
         # 5. Client sends `END` message to the WebSocket API.
         # 6. This handler receives the `END` message, concatenates the parts and sends the message to Bedrock.
         if step == "START":
-            try:
-                # Verify JWT token
-                decoded = verify_token(token)
-            except Exception as e:
-                logger.exception(f"Invalid token: {e}")
-                return {
-                    "statusCode": 403,
-                    "body": json.dumps(
-                        dict(
-                            status="ERROR",
-                            reason="Invalid token.",
-                        )
-                    ),
+            auth_mode = body.get("auth_mode", "cognito")  # Default to cognito for backward compatibility
+            
+            if auth_mode == "sdk":
+                # SDK authentication mode - use provided sdk_user_id directly
+                sdk_user_id = body.get("sdk_user_id")
+                if not sdk_user_id:
+                    return {
+                        "statusCode": 400,
+                        "body": json.dumps(
+                            dict(
+                                status="ERROR",
+                                reason="sdk_user_id is required for SDK auth mode.",
+                            )
+                        ),
+                    }
+                # Store auth mode for later use
+                user_id = sdk_user_id
+                auth_info = {
+                    "mode": "sdk",
+                    "sdk_user_id": sdk_user_id
+                }
+            else:
+                # Cognito authentication mode (default)
+                try:
+                    # Verify JWT token
+                    decoded = verify_token(token)
+                except Exception as e:
+                    logger.exception(f"Invalid token: {e}")
+                    return {
+                        "statusCode": 403,
+                        "body": json.dumps(
+                            dict(
+                                status="ERROR",
+                                reason="Invalid token.",
+                            )
+                        ),
+                    }
+                
+                user_id = decoded["sub"]
+                auth_info = {
+                    "mode": "cognito",
+                    "decoded_token": decoded
                 }
 
-            user_id = decoded["sub"]
-
-            # Store user id
+            # Store user id and auth info
             response = table.put_item(
                 Item={
                     "ConnectionId": connection_id,
                     # Store as zero
                     "MessagePartId": decimal(0),
                     "UserId": user_id,
+                    "AuthInfo": json.dumps(auth_info),  # Store auth information
                     "expire": expire,
                 }
             )
             return {"statusCode": 200, "body": "Session started."}
         elif step == "END":
-            decoded = verify_token(token)
-            user = User.from_decoded_token(decoded)
-
-            # Retrieve user id
+            # Retrieve user id and auth info
             response = table.query(
                 KeyConditionExpression=Key("ConnectionId").eq(connection_id),
                 FilterExpression=Attr("UserId").exists(),
             )
             user_id = response["Items"][0]["UserId"]
+            auth_info = json.loads(response["Items"][0].get("AuthInfo", '{}'))
+            
+            # Create User object based on auth mode
+            if auth_info.get("mode") == "sdk":
+                # SDK authentication mode
+                user = User.from_sdk_user_id(auth_info["sdk_user_id"])
+            else:
+                # Cognito authentication mode (default or legacy)
+                # For backward compatibility, if no auth_info, use token verification
+                if "decoded_token" in auth_info:
+                    decoded = auth_info["decoded_token"]
+                else:
+                    # Legacy path for backward compatibility
+                    decoded = verify_token(token)
+                user = User.from_decoded_token(decoded)
 
             # Concatenate the message parts
             message_parts = []

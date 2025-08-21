@@ -55,6 +55,16 @@ class User(UserWithoutGroups):
             groups=["Admin"],
         )
 
+    @classmethod
+    def from_sdk_user_id(cls, sdk_user_id: str) -> Self:
+        """Create a User from an SDK user_id (non-Cognito auth)."""
+        return cls(
+            id=sdk_user_id,
+            name=sdk_user_id,
+            email=f"{sdk_user_id}@sdk",  # dummy email for SDK users
+            groups=[],  # SDK users have no special groups by default
+        )
+
 
 class UserGroup(BaseModel):
     name: str
