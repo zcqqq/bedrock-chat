@@ -6,3 +6,7 @@ export const bedrockChatParams = new Map<string, BedrockChatParametersInput>();
 
 // If you define "default" environment here, parameters in cdk.json are ignored
 // bedrockChatParams.set("default", {});
+bedrockChatParams.set("dev", {
+    enableRagReplicas: false, // Cost-saving for dev environment
+    enableBotStoreReplicas: false, // Cost-saving for dev environment
+});
