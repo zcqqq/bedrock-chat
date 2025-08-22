@@ -671,9 +671,14 @@ def find_recently_used_bots_by_user_id(
 def find_bot_by_id(bot_id: str) -> BotModel:
     table = get_bot_table_client()
     logger.info(f"Finding bot with id: {bot_id}")
+    logger.info(f"Table name: {table.table_name}")
     response = table.query(
         IndexName="BotIdIndex", KeyConditionExpression=Key("BotId").eq(bot_id)
     )
+    
+    logger.info(f"Query response - Count: {response.get('Count', 0)}, Items: {len(response.get('Items', []))}")
+    if response.get('Items'):
+        logger.info(f"First item keys: {list(response['Items'][0].keys())}")
 
     if len(response["Items"]) == 0:
         raise RecordNotFoundError(f"Bot with id {bot_id} not found")

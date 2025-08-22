@@ -585,7 +585,15 @@ def modify_bot_last_used_time(user: User, bot: BotModel):
     if bot.is_owned_by_user(user):
         return update_bot_last_used_time(user.id, bot.id)
     else:
-        return update_alias_last_used_time(user.id, bot.id)
+        try:
+            return update_alias_last_used_time(user.id, bot.id)
+        except RecordNotFoundError:
+            logger.info(f"Alias for bot {bot.id} not found. Creating alias.")
+            # Create alias if it doesn't exist
+            alias = BotAliasModel.from_bot_for_initial_alias(bot)
+            store_alias(user.id, alias)
+            # Now try updating the last used time again
+            return update_alias_last_used_time(user.id, bot.id)
 
 
 def modify_bot_stats(user: User, bot: BotModel, increment: int):

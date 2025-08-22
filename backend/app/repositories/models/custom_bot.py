@@ -1,6 +1,8 @@
 import logging
 from typing import Annotated, Any, Dict, List, Literal, Optional, Self, Type, get_args
 
+logger = logging.getLogger(__name__)
+
 from app.config import DEFAULT_GENERATION_CONFIG
 from app.config import GenerationParams as GenerationParamsDict
 from app.repositories.models.common import DynamicBaseModel, Float, SecureString
@@ -479,22 +481,31 @@ class BotModel(BaseModel):
 
     def is_accessible_by_user(self, user: User) -> bool:
         """Check if the bot is accessible by the user. This is used for reading the bot."""
+        logger.info(f"Checking access for bot {self.id}: user_id={user.id}, user_groups={user.groups}")
+        logger.info(f"Bot sharing: shared_scope={self.shared_scope}, owner={self.owner_user_id}")
 
         if user.is_admin() or self.owner_user_id == user.id:
+            logger.info("Access granted: user is admin or owner")
             return True
 
         if self.shared_scope == "private":
+            logger.info("Access denied: bot is private")
             return False
 
         if self.shared_scope == "all":
+            logger.info("Access granted: bot is shared with all")
             return True
 
         if user.id in self.allowed_cognito_users:
+            logger.info("Access granted: user in allowed users list")
             return True
 
         # Check if the user is in the allowed Cognito groups
         user_groups = get_user_cognito_groups(user)
-        return any(group in self.allowed_cognito_groups for group in user_groups)
+        logger.info(f"User cognito groups: {user_groups}, allowed groups: {self.allowed_cognito_groups}")
+        result = any(group in self.allowed_cognito_groups for group in user_groups)
+        logger.info(f"Group-based access result: {result}")
+        return result
 
     def is_editable_by_user(self, user: User) -> bool:
         """Check if the bot is editable by the user. This is used for updating and deleting the bot."""
